@@ -1,9 +1,9 @@
-use axum::{routing::post, Router};
+use axum::{Router, routing::post};
 use axum_test::TestServer;
-use libiamo::handlers::auth::register;
-use libiamo::models::auth::RegisterRequest;
 use serde_json::json;
 use sqlx::PgPool;
+
+use libiamo::handlers::auth::register;
 
 async fn setup_test_app(pool: PgPool) -> Router {
     Router::new()
@@ -14,7 +14,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
 #[sqlx::test]
 async fn test_register_success(pool: PgPool) {
     let app = setup_test_app(pool).await;
-    let server = TestServer::new(app).unwrap();
+    let server = TestServer::new(app);
 
     let payload = json!({
         "email": "test@example.com",
@@ -38,7 +38,7 @@ async fn test_register_success(pool: PgPool) {
 #[sqlx::test]
 async fn test_register_duplicate_email(pool: PgPool) {
     let app = setup_test_app(pool).await;
-    let server = TestServer::new(app).unwrap();
+    let server = TestServer::new(app);
 
     let payload = json!({
         "email": "dup@example.com",
@@ -51,11 +51,15 @@ async fn test_register_duplicate_email(pool: PgPool) {
     });
 
     // First registration
-    server.post("/auth/register").json(&payload).await.assert_status_success();
+    server
+        .post("/auth/register")
+        .json(&payload)
+        .await
+        .assert_status_success();
 
     // Duplicate registration
     let response = server.post("/auth/register").json(&payload).await;
-    
+
     // Should fail with 409 Conflict (as handled by our AppError)
     response.assert_status(axum::http::StatusCode::CONFLICT);
 }
@@ -63,7 +67,7 @@ async fn test_register_duplicate_email(pool: PgPool) {
 #[sqlx::test]
 async fn test_register_invalid_email(pool: PgPool) {
     let app = setup_test_app(pool).await;
-    let server = TestServer::new(app).unwrap();
+    let server = TestServer::new(app);
 
     let payload = json!({
         "email": "invalid-email", // Invalid email format
