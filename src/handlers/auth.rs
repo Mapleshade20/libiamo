@@ -1,5 +1,3 @@
-use crate::error::AppError;
-use crate::models::auth::{RegisterRequest, RegisterResponse};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
@@ -8,16 +6,19 @@ use axum::{Json, extract::State, http::StatusCode};
 use sqlx::PgPool;
 use validator::Validate;
 
+use crate::error::AppError;
+use crate::models::auth::{RegisterRequest, RegisterResponse};
+
 pub async fn register(
     State(pool): State<PgPool>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>), AppError> {
-    // 1. Validate the input
+    // Validate the input
     payload
         .validate()
         .map_err(|e| AppError::ValidationError(e.to_string()))?;
 
-    // 2. Hash the password
+    // Hash the password
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     let password_hash = argon2
@@ -25,11 +26,11 @@ pub async fn register(
         .map_err(|e| AppError::HashError(e.to_string()))?
         .to_string();
 
-    // 3. Insert the user into the database
+    // Insert the user into the database
     let user_id = sqlx::query!(
         r#"
         INSERT INTO users (
-            email, password_hash, nickname, role, 
+            email, password_hash, nickname, role,
             target_language, native_language, timezone, level_self_assign
         )
         VALUES ($1, $2, $3, $4::user_role, $5::language_code, $6::native_language_code, $7, $8)
