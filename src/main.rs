@@ -1,12 +1,12 @@
+use std::env;
+
 use axum::{Router, routing::post};
 use dotenvy::dotenv;
 use sqlx::postgres::PgPoolOptions;
-use std::net::SocketAddr;
+use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod error;
-mod handlers;
-mod models;
+use libiamo::handlers;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,6 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing for logging
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
     // Connect to the database
@@ -32,10 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(pool);
 
     // Start the server
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = env::var("ADDRESS").expect("Env variable `ADDRESS` should be set");
     tracing::info!("Listening on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())
