@@ -34,6 +34,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
             AppError::DatabaseError(ref e) => {
+                tracing::error!("Database error: {:?}", e);
                 // Check for unique constraint violation (PostgreSQL error code 23505)
                 if let Some(db_err) = e.as_database_error() {
                     if db_err.code() == Some(std::borrow::Cow::Borrowed("23505")) {
@@ -41,13 +42,13 @@ impl IntoResponse for AppError {
                     } else {
                         (
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            "Internal database error".to_string(),
+                            format!("Database error: {}", db_err.message()),
                         )
                     }
                 } else {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        "Internal database error".to_string(),
+                        format!("Internal database error: {}", e),
                     )
                 }
             }
