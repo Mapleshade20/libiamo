@@ -1,30 +1,23 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO users (\n            email, password_hash, nickname, role,\n            target_language, native_language, timezone, level_self_assign\n        )\n        VALUES ($1, $2, $3, $4::user_role, $5::language_code, $6::native_language_code, $7, $8)\n        RETURNING id\n        ",
+  "query": "\n        INSERT INTO users (\n            email, password_hash,\n            active_language, native_language, timezone\n        )\n        VALUES ($1, $2, $3::language_code, $4::native_language_code, $5)\n        RETURNING id, created_at\n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "id",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
         "Varchar",
         "Text",
-        "Varchar",
-        {
-          "Custom": {
-            "name": "user_role",
-            "kind": {
-              "Enum": [
-                "learner",
-                "admin"
-              ]
-            }
-          }
-        },
         {
           "Custom": {
             "name": "language_code",
@@ -45,13 +38,13 @@
             }
           }
         },
-        "Varchar",
-        "Int4"
+        "Varchar"
       ]
     },
     "nullable": [
+      false,
       false
     ]
   },
-  "hash": "5e4a52d146bd0211aff440b8749d23a237e6e670eb489840c5399353ebdace26"
+  "hash": "059e9902280c8d78f46bc42177e2c5c853bdc9f98bed76fdbae87ad8ba82b3e8"
 }

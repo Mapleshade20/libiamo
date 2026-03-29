@@ -16,15 +16,15 @@ CREATE TABLE users (
     email               VARCHAR(128) UNIQUE NOT NULL,
     password_hash       TEXT NOT NULL,
     is_verified         BOOLEAN NOT NULL DEFAULT FALSE,
-    role                user_role NOT NULL,
+    role                user_role NOT NULL DEFAULT 'learner',
 
-    nickname            VARCHAR(64),
+    nickname            VARCHAR(64) NOT NULL DEFAULT 'New User',
     avatar_url          VARCHAR(512),
-    target_language     language_code NOT NULL,
     native_language     native_language_code NOT NULL,
     timezone            VARCHAR(64) NOT NULL DEFAULT 'UTC',
     gems_balance        INT DEFAULT 0,
-    level_self_assign   INT CHECK (level_self_assign BETWEEN 1 AND 5),
+
+    active_language     language_code NOT NULL,
 
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),

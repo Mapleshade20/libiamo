@@ -57,34 +57,53 @@ pub async fn register(
             .await?;
     }
 
-    // Insert the user into the database
-    let user_id = sqlx::query!(
+    let first_language = payload.target_languages.first().unwrap(); // Safe because validation ensures it's not empty
+
+    let mut tx = pool.begin().await?;
+    let created_at = sqlx::query!(
         r#"
         INSERT INTO users (
-            email, password_hash, nickname, role,
-            target_language, native_language, timezone, level_self_assign
+            email, password_hash,
+            active_language, native_language, timezone
         )
-        VALUES ($1, $2, $3, $4::user_role, $5::language_code, $6::native_language_code, $7, $8)
-        RETURNING id
+        VALUES ($1, $2, $3::language_code, $4::native_language_code, $5)
+        RETURNING id, created_at
         "#,
         payload.email,
         password_hash,
-        payload.nickname,
-        payload.role as _,
-        payload.target_language as _,
+        first_language as _,
         payload.native_language as _,
-        payload.timezone.as_deref().unwrap_or("UTC"),
-        payload.level_self_assign
+        payload.timezone.as_deref().unwrap_or("UTC")
     )
-    .fetch_one(&pool)
-    .await?
-    .id;
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    let user_id = created_at.id;
+    let created_at = created_at.created_at;
+
+    // Create user_learning_profiles for each target language
+    for lang in &payload.target_languages {
+        sqlx::query!(
+            r#"
+            INSERT INTO user_learning_profiles (user_id, language)
+            VALUES ($1, $2::language_code)
+            "#,
+            user_id,
+            lang as _
+        )
+        .execute(tx.as_mut())
+        .await?;
+    }
+
+    tx.commit().await?;
 
     Ok((
         StatusCode::CREATED,
         Json(RegisterResponse {
-            message: "User registered successfully".to_string(),
-            user_id,
+            email: payload.email,
+            target_languages: payload.target_languages,
+            native_language: payload.native_language,
+            created_at: created_at.to_rfc3339(),
         }),
     ))
 }

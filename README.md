@@ -13,19 +13,18 @@
 ### Database Setup
 
 1.  **Environment Variables**: Create a `.env` file from the template `.env.example` in the root directory and set your database URL:
+
     ```env
     DATABASE_URL=postgres://your_username:your_password@localhost:5432/libiamo_db
     ```
-    *Replace `your_username`, `your_password`, and `libiamo_db` with your actual local PostgreSQL credentials.*
 
-2.  **Initialize Database**: Create the project database:
+2.  **Initialize Database**: Create the user first and then create its owned database:
+
     ```bash
-    sqlx database create
+    createdb libiamo_db -O libiamo_user
     ```
 
-    If you'd like to create an independent postgres user for libiamo rather than the default superuser, you might want to create it first and give it appropriate permissions. Consult ChatGPT for details.
-
-3.  **Run Migrations**: Apply the schema (tables, types, and domains) to your database:
+3.  **Run Migrations**: Apply the schema to the database:
     ```bash
     sqlx migrate run
     ```
