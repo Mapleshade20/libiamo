@@ -1,3 +1,15 @@
+-- 定义 UUID v7 生成函数
+CREATE OR REPLACE FUNCTION uuidv7() RETURNS uuid AS $$
+DECLARE
+    v_time bigint := (extract(epoch from now()) * 1000)::bigint;
+    v_bytes bytea := decode(lpad(to_hex(v_time), 12, '0'), 'hex') || gen_random_bytes(10);
+BEGIN
+    v_bytes := set_byte(v_bytes, 6, (get_byte(v_bytes, 6) & 15) | 112); -- set version to 7
+    v_bytes := set_byte(v_bytes, 8, (get_byte(v_bytes, 8) & 63) | 128); -- set variant to 10xx
+    RETURN encode(v_bytes, 'hex')::uuid;
+END;
+$$ LANGUAGE plpgsql VOLATILE;
+
 -- ENUM and DOMAIN types
 CREATE TYPE user_role AS ENUM ('learner', 'admin');
 

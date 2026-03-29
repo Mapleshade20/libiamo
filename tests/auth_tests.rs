@@ -20,7 +20,6 @@ async fn test_register_success(pool: PgPool) {
         "email": "test@example.com",
         "password": "secure_password123",
         "nickname": "tester",
-        "role": "learner",
         "target_language": "en",
         "native_language": "zh",
         "timezone": "Europe/Rome",
@@ -44,7 +43,6 @@ async fn test_register_duplicate_email(pool: PgPool) {
         "email": "dup@example.com",
         "password": "password123",
         "nickname": "dup",
-        "role": "learner",
         "target_language": "en",
         "native_language": "en",
         "level_self_assign": 1
@@ -73,7 +71,6 @@ async fn test_register_invalid_email(pool: PgPool) {
         "email": "invalid-email", // Invalid email format
         "password": "password123",
         "nickname": "tester",
-        "role": "learner",
         "target_language": "en",
         "native_language": "en",
         "level_self_assign": 1

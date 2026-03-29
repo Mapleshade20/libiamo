@@ -8,7 +8,6 @@ pub struct RegisterRequest {
     #[validate(length(min = 8))]
     pub password: String,
     pub nickname: String,
-    pub role: String,
     pub target_language: String,
     pub native_language: String,
     pub timezone: Option<String>,

@@ -26,8 +26,12 @@ pub async fn register(
         .map_err(|e| AppError::HashError(e.to_string()))?
         .to_string();
 
-    // Insert the user into the database
-    let user_id = sqlx::query!(
+    // TODO: Replace query_unchecked! with query! after setting up SQLx offline mode
+    // Issue: SQLx compile-time type checking requires database connection during build
+    // Solution: Use 'cargo sqlx prepare' to generate offline metadata, then 'SQLX_OFFLINE=true cargo build'
+    // Insert the user into the database with hardcoded "learner" role
+    // Admin role can only be set via database operations
+    let result = sqlx::query_unchecked!(
         r#"
         INSERT INTO users (
             email, password_hash, nickname, role,
@@ -39,15 +43,16 @@ pub async fn register(
         payload.email,
         password_hash,
         payload.nickname,
-        payload.role as _,
-        payload.target_language as _,
-        payload.native_language as _,
+        "learner",
+        payload.target_language,
+        payload.native_language,
         payload.timezone.as_deref().unwrap_or("UTC"),
         payload.level_self_assign
     )
     .fetch_one(&pool)
-    .await?
-    .id;
+    .await?;
+    
+    let user_id = result.id;
 
     Ok((
         StatusCode::CREATED,
