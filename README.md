@@ -1,37 +1,82 @@
 # Libiamo Backend
 
-## Getting Started
+## Quick Start
+
+The fastest way to get started is to use the automated setup script:
+
+```bash
+bash scripts/setup-and-run.sh
+```
+
+This script will:
+- ✅ Check all prerequisites (PostgreSQL, Rust, sqlx-cli)
+- ✅ Create/configure PostgreSQL user and database
+- ✅ Auto-generate or update `.env` file with credentials
+- ✅ Run database migrations
+- ✅ Start the development server
+
+The server will run at `http://127.0.0.1:8090`
+
+---
+
+## Manual Setup (Alternative)
 
 ### Prerequisites
 
-1.  **PostgreSQL 18**: Ensure you have PostgreSQL 18 installed and running on your machine.
-2.  **SQLX CLI**: Install the SQLx command-line tool for database management:
+1.  **PostgreSQL 18**: Ensure you have PostgreSQL 18 installed and running.
+2.  **Rust & Cargo**: Install from https://rustup.rs/
+3.  **SQLX CLI**: Install the SQLx command-line tool:
     ```bash
     cargo install sqlx-cli --no-default-features --features native-tls,postgres
     ```
 
-### Database Setup
+### Step-by-Step Setup
 
-1.  **Environment Variables**: Create a `.env` file from the template `.env.example` in the root directory and set your database URL:
-    ```env
-    DATABASE_URL=postgres://your_username:your_password@localhost:5432/libiamo_db
-    ```
-    *Replace `your_username`, `your_password`, and `libiamo_db` with your actual local PostgreSQL credentials.*
-
-2.  **Initialize Database**: Create the project database:
+1.  **Set up database and user** (one-time setup):
     ```bash
-    sqlx database create
+    bash scripts/setup-db.sh
     ```
 
-3.  **Run Migrations**: Apply the schema (tables, types, and domains) to your database:
+2.  **Configure environment variables**: Copy `.env.example` to `.env`:
+    ```bash
+    cp .env.example .env
+    ```
+    Then update the credentials in `.env` if needed.
+
+3.  **Run migrations**: Apply the schema to your database:
     ```bash
     sqlx migrate run
     ```
 
-### Development
+4.  **Start the server**:
+    ```bash
+    cargo run
+    ```
 
-To run the backend server:
+---
+
+## Development
+
+### Running Tests
+
 ```bash
-cargo run
+cargo test
 ```
-The server will be available at the specified address and port.
+
+### Checking Code
+
+```bash
+cargo check
+```
+
+### Building for Production
+
+```bash
+cargo build --release
+```
+
+---
+
+## Scripts
+
+For more information about available scripts and their usage, see [scripts/README.md](scripts/README.md).

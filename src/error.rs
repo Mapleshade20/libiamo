@@ -28,41 +28,68 @@ pub enum AppError {
 
     #[error("Forbidden: {0}")]
     Forbidden(String),
+
+    // Email verification errors
+    #[error("Invalid verification token")]
+    TokenInvalid,
+
+    #[error("Verification token has expired")]
+    TokenExpired,
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
+        let (status, error_code, error_message) = match self {
             AppError::DatabaseError(ref e) => {
                 // Check for unique constraint violation (PostgreSQL error code 23505)
                 if let Some(db_err) = e.as_database_error()
                     && db_err.code() == Some(std::borrow::Cow::Borrowed("23505"))
                 {
-                    (StatusCode::CONFLICT, "Email already exists".to_string())
+                    (
+                        StatusCode::CONFLICT,
+                        "EMAIL_ALREADY_EXISTS",
+                        "Email already exists".to_string(),
+                    )
                 } else {
                     tracing::error!("Database error: {:?}", e);
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
+                        "DATABASE_ERROR",
                         "Internal database error".to_string(),
                     )
                 }
             }
-            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+            AppError::ValidationError(msg) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", msg)
+            }
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg),
             AppError::HashError(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
+                "HASH_ERROR",
                 "Password hashing failed".to_string(),
             ),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
-            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", msg),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, "FORBIDDEN", msg),
             AppError::InternalServerError => (
                 StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
                 "Internal server error".to_string(),
+            ),
+            AppError::TokenInvalid => (
+                StatusCode::BAD_REQUEST,
+                "TOKEN_INVALID",
+                "Invalid or expired verification token".to_string(),
+            ),
+            AppError::TokenExpired => (
+                StatusCode::GONE,
+                "TOKEN_EXPIRED",
+                "Verification token has expired".to_string(),
             ),
         };
 
         let body = Json(json!({
-            "error": error_message,
+            "err": error_code,
+            "message": error_message,
         }));
 
         (status, body).into_response()

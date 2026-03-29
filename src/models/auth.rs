@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -5,18 +6,40 @@ use validator::Validate;
 pub struct RegisterRequest {
     #[validate(email)]
     pub email: String,
-    #[validate(length(min = 8))]
+    #[validate(length(min = 8, max = 72))]
     pub password: String,
-    pub nickname: String,
     pub target_language: String,
     pub native_language: String,
     pub timezone: Option<String>,
     #[validate(range(min = 1, max = 5))]
-    pub level_self_assign: Option<i32>,
+    pub level_self_assign: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct RegisterResponse {
-    pub message: String,
-    pub user_id: i32,
+    pub id: i32,
+    pub email: String,
+    pub role: String,
+    pub target_language: String,
+    pub native_language: String,
+    pub created_at: DateTime<Utc>,
+}
+
+// Email verification models
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyEmailRequest {
+    pub token: String,
+}
+
+#[derive(Debug)]
+pub struct EmailVerificationToken {
+    pub token: String,
+    pub token_hash: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VerificationStatus {
+    pub email: String,
+    pub is_verified: bool,
+    pub created_at: DateTime<Utc>,
 }
