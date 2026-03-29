@@ -8,7 +8,7 @@ pub fn generate_email_verification_token() -> EmailVerificationToken {
     let mut random_bytes = [0u8; 32];
     let mut rng = rand::thread_rng();
     rng.fill_bytes(&mut random_bytes);
-    let token = BASE64.encode(&random_bytes);
+    let token = BASE64.encode(random_bytes);
 
     let token_hash = hash_token(&token);
 
