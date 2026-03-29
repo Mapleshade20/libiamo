@@ -39,59 +39,84 @@ pub enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_code, error_message) = match self {
-            AppError::DatabaseError(ref e) => {
-                // Check for unique constraint violation (PostgreSQL error code 23505)
-                if let Some(db_err) = e.as_database_error()
-                    && db_err.code() == Some(std::borrow::Cow::Borrowed("23505"))
-                {
-                    (
-                        StatusCode::CONFLICT,
-                        "EMAIL_ALREADY_EXISTS",
-                        "Email already exists".to_string(),
-                    )
-                } else {
-                    tracing::error!("Database error: {:?}", e);
-                    (
+        // Handle dynamic error codes (Unauthorized, Forbidden use the message as the error code)
+        match self {
+            AppError::Unauthorized(msg) => {
+                let body = Json(json!({
+                    "err": msg,
+                    "message": msg,
+                }));
+                (StatusCode::UNAUTHORIZED, body).into_response()
+            }
+            AppError::Forbidden(msg) => {
+                let body = Json(json!({
+                    "err": msg,
+                    "message": msg,
+                }));
+                (StatusCode::FORBIDDEN, body).into_response()
+            }
+            // Handle all other errors with static error codes
+            err => {
+                let (status, error_code, error_message) = match err {
+                    AppError::DatabaseError(ref e) => {
+                        // Check for unique constraint violation (PostgreSQL error code 23505)
+                        if let Some(db_err) = e.as_database_error()
+                            && db_err.code() == Some(std::borrow::Cow::Borrowed("23505"))
+                        {
+                            (
+                                StatusCode::CONFLICT,
+                                "EMAIL_ALREADY_EXISTS",
+                                "Email already exists".to_string(),
+                            )
+                        } else {
+                            let error_detail = if let Some(db_err) = e.as_database_error() {
+                                format!("PG Code: {:?}, Message: {}", db_err.code(), db_err.message())
+                            } else {
+                                format!("{:?}", e)
+                            };
+                            tracing::error!("Database error: {}", error_detail);
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "DATABASE_ERROR",
+                                format!("Internal database error: {}", error_detail),
+                            )
+                        }
+                    }
+                    AppError::ValidationError(msg) => {
+                        (StatusCode::UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", msg)
+                    }
+                    AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg),
+                    AppError::HashError(_) => (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        "DATABASE_ERROR",
-                        "Internal database error".to_string(),
-                    )
-                }
-            }
-            AppError::ValidationError(msg) => {
-                (StatusCode::UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", msg)
-            }
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg),
-            AppError::HashError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "HASH_ERROR",
-                "Password hashing failed".to_string(),
-            ),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", msg),
-            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, "FORBIDDEN", msg),
-            AppError::InternalServerError => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-                "Internal server error".to_string(),
-            ),
-            AppError::TokenInvalid => (
-                StatusCode::BAD_REQUEST,
-                "TOKEN_INVALID",
-                "Invalid or expired verification token".to_string(),
-            ),
-            AppError::TokenExpired => (
-                StatusCode::GONE,
-                "TOKEN_EXPIRED",
-                "Verification token has expired".to_string(),
-            ),
-        };
+                        "HASH_ERROR",
+                        "Password hashing failed".to_string(),
+                    ),
+                    AppError::InternalServerError => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_ERROR",
+                        "Internal server error".to_string(),
+                    ),
+                    AppError::TokenInvalid => (
+                        StatusCode::BAD_REQUEST,
+                        "TOKEN_INVALID",
+                        "Invalid or expired verification token".to_string(),
+                    ),
+                    AppError::TokenExpired => (
+                        StatusCode::GONE,
+                        "TOKEN_EXPIRED",
+                        "Verification token has expired".to_string(),
+                    ),
+                    // These should be handled above, but included for completeness
+                    AppError::Unauthorized(_) | AppError::Forbidden(_) => unreachable!(),
+                };
 
-        let body = Json(json!({
-            "err": error_code,
-            "message": error_message,
-        }));
+                let body = Json(json!({
+                    "err": error_code,
+                    "message": error_message,
+                }));
 
-        (status, body).into_response()
+                (status, body).into_response()
+            }
+        }
     }
 }

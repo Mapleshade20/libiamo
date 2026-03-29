@@ -43,3 +43,39 @@ pub struct VerificationStatus {
     pub is_verified: bool,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoginResponse {
+    pub id: i32,
+    pub email: String,
+    pub role: String,
+    pub nickname: Option<String>,
+    pub avatar_url: Option<String>,
+    pub target_language: String,
+    pub native_language: String,
+    pub timezone: String,
+    pub gems_balance: i32,
+    pub level_self_assign: Option<i32>,
+}
+
+#[derive(Debug)]
+pub struct UserLoginRecord {
+    pub id: i32,
+    pub email: String,
+    pub password_hash: String,
+    pub is_verified: bool,
+    pub role: String,
+    pub nickname: Option<String>,
+    pub avatar_url: Option<String>,
+    pub target_language: String,
+    pub native_language: String,
+    pub timezone: String,
+    pub gems_balance: i32,
+    pub level_self_assign: Option<i32>,
+}

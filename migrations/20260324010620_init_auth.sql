@@ -1,3 +1,6 @@
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 定义 UUID v7 生成函数
 CREATE OR REPLACE FUNCTION uuidv7() RETURNS uuid AS $$
 DECLARE

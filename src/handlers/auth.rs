@@ -1,16 +1,17 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State, http::HeaderMap, http::StatusCode};
 use chrono::{Duration, Utc};
 use sqlx::PgPool;
-use std::env;
 use tracing::info;
 use validator::Validate;
 
 use crate::error::AppError;
-use crate::models::auth::{RegisterRequest, RegisterResponse, VerifyEmailRequest};
+use crate::models::auth::{
+    LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, VerifyEmailRequest,
+};
 use crate::services::email::{EmailConfig, spawn_send_verification_email};
 use crate::services::token;
 
@@ -82,11 +83,7 @@ pub async fn register(
 
     // Generate email verification token
     let email_token = token::generate_email_verification_token();
-    let token_expiration_hours = env::var("TOKEN_EXPIRATION_HOURS")
-        .unwrap_or_else(|_| "24".to_string())
-        .parse::<i64>()
-        .unwrap_or(24);
-    let expires_at = Utc::now() + Duration::hours(token_expiration_hours);
+    let expires_at = Utc::now() + Duration::hours(24);
 
     // Store the token hash in the database
     sqlx::query_unchecked!(
@@ -209,4 +206,144 @@ pub async fn verify_email(
 
     // Return 204 No Content as per API spec
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn login(
+    State(pool): State<PgPool>,
+    Json(payload): Json<LoginRequest>,
+) -> Result<(StatusCode, HeaderMap, Json<LoginResponse>), AppError> {
+    // Validate the input
+    if payload.email.is_empty() || payload.password.is_empty() {
+        return Err(AppError::ValidationError(
+            "Email and password are required".to_string(),
+        ));
+    }
+
+    // Query user by email, converting ENUM to text for retrieval
+    let row = sqlx::query!(
+        r#"
+        SELECT id, email, password_hash, is_verified, role::TEXT as "role",
+               nickname, avatar_url,
+               target_language::TEXT as "target_language", native_language, timezone, gems_balance, level_self_assign
+        FROM users
+        WHERE email = $1 AND deleted_at IS NULL
+        "#,
+        payload.email
+    )
+    .fetch_optional(&pool)
+    .await?;
+
+    let row = row.ok_or_else(|| AppError::Unauthorized("INVALID_CREDENTIALS".to_string()))?;
+
+    // Check if email is verified
+    if !row.is_verified {
+        return Err(AppError::Forbidden("EMAIL_NOT_VERIFIED".to_string()));
+    }
+
+    // Verify password
+    let password_hash = PasswordHash::new(&row.password_hash).map_err(|e| {
+        tracing::error!("Failed to parse password hash: {}", e);
+        AppError::InternalServerError
+    })?;
+
+    let argon2 = Argon2::default();
+    argon2
+        .verify_password(payload.password.as_bytes(), &password_hash)
+        .map_err(|_| AppError::Unauthorized("INVALID_CREDENTIALS".to_string()))?;
+
+    // Create a new session (let database generate UUID)
+    let expires_at = Utc::now() + Duration::days(7); // 7-day session
+
+    let session_id: String = sqlx::query_scalar!(
+        r#"
+        INSERT INTO auth_sessions (user_id, expires_at)
+        VALUES ($1, $2)
+        RETURNING id::TEXT
+        "#,
+        row.id,
+        expires_at
+    )
+    .fetch_one(&pool)
+    .await?
+    .unwrap_or_default();
+
+    let response = LoginResponse {
+        id: row.id,
+        email: row.email.clone(),
+        role: row.role.unwrap_or_else(|| "learner".to_string()),
+        nickname: row.nickname,
+        avatar_url: row.avatar_url,
+        target_language: row.target_language.unwrap_or_else(|| "en".to_string()),
+        native_language: row.native_language,
+        timezone: row.timezone,
+        gems_balance: row.gems_balance.unwrap_or(0),
+        level_self_assign: row.level_self_assign,
+    };
+
+    // Create Set-Cookie header
+    let cookie = format!(
+        "libiamo_session={}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800",
+        session_id
+    );
+
+    let mut headers = HeaderMap::new();
+    if let Ok(header_value) = cookie.parse() {
+        headers.insert("set-cookie", header_value);
+    }
+
+    info!(
+        "User {} logged in successfully, session_id: {}",
+        row.id, session_id
+    );
+
+    Ok((StatusCode::OK, headers, Json(response)))
+}
+
+/// Extract session ID from Cookie header
+fn extract_session_id_from_cookies(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cookie_str| {
+            for cookie in cookie_str.split(';') {
+                let cookie = cookie.trim();
+                if let Some(value) = cookie.strip_prefix("libiamo_session=") {
+                    return Some(value.to_string());
+                }
+            }
+            None
+        })
+}
+
+
+pub async fn logout(
+    State(pool): State<PgPool>,
+    headers: HeaderMap,
+) -> Result<(StatusCode, HeaderMap), AppError> {
+    // Extract session ID from cookies
+    let session_id = extract_session_id_from_cookies(&headers);
+
+    // Delete the session from the database if it exists
+    if let Some(session_id) = session_id {
+        // Session ID is a UUID string from the cookie, need to convert it
+        sqlx::query_unchecked!(
+            r#"DELETE FROM auth_sessions WHERE id::TEXT = $1"#,
+            session_id
+        )
+        .execute(&pool)
+        .await
+        .ok(); // Ignore errors - session might already be deleted
+    }
+
+    // Create Set-Cookie header to clear the cookie
+    let clear_cookie = "libiamo_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
+
+    let mut response_headers = HeaderMap::new();
+    if let Ok(header_value) = clear_cookie.parse() {
+        response_headers.insert("set-cookie", header_value);
+    }
+
+    info!("User logged out successfully");
+
+    Ok((StatusCode::NO_CONTENT, response_headers))
 }

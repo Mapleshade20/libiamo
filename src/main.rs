@@ -31,6 +31,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/auth/register", post(handlers::auth::register))
         .route("/auth/verify-email", post(handlers::auth::verify_email))
+        .route("/auth/login", post(handlers::auth::login))
+        .route("/auth/logout", post(handlers::auth::logout))
         .with_state(pool);
 
     // Start the server
