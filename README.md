@@ -23,6 +23,8 @@
     sqlx database create
     ```
 
+    If you'd like to create an independent postgres user for libiamo rather than the default superuser, you might want to create it first and give it appropriate permissions. Consult ChatGPT for details.
+
 3.  **Run Migrations**: Apply the schema (tables, types, and domains) to your database:
     ```bash
     sqlx migrate run

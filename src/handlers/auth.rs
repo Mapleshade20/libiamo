@@ -26,6 +26,37 @@ pub async fn register(
         .map_err(|e| AppError::HashError(e.to_string()))?
         .to_string();
 
+    // Check if user already exists
+    let existing_user = sqlx::query!(
+        r#"
+        SELECT is_verified, created_at,
+               (now() - created_at < interval '20 minutes') as "is_too_soon!"
+        FROM users
+        WHERE email = $1
+        "#,
+        payload.email
+    )
+    .fetch_optional(&pool)
+    .await?;
+
+    if let Some(user) = existing_user {
+        if user.is_verified {
+            return Err(AppError::Conflict("Email already exists".to_string()));
+        }
+
+        if user.is_too_soon {
+            return Err(AppError::TooManyRequests(
+                "Please wait 20 minutes before trying to sign up again".to_string(),
+            ));
+        }
+
+        // If it's been more than 20 minutes and not verified, delete the old user
+        // so we can re-insert them
+        sqlx::query!("DELETE FROM users WHERE email = $1", payload.email)
+            .execute(&pool)
+            .await?;
+    }
+
     // Insert the user into the database
     let user_id = sqlx::query!(
         r#"
