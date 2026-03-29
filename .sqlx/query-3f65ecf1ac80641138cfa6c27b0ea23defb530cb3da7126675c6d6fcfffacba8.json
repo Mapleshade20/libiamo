@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO user_learning_profiles (user_id, language)\n            VALUES ($1, $2::language_code)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        {
+          "Custom": {
+            "name": "language_code",
+            "kind": {
+              "Enum": [
+                "en",
+                "es",
+                "fr"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3f65ecf1ac80641138cfa6c27b0ea23defb530cb3da7126675c6d6fcfffacba8"
+}

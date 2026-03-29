@@ -50,7 +50,7 @@ impl IntoResponse for AppError {
                     )
                 }
             }
-            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             AppError::HashError(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
