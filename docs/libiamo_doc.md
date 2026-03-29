@@ -21,16 +21,16 @@ CREATE TABLE users (
     id              INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email           VARCHAR(128) UNIQUE NOT NULL,
     password_hash   TEXT NOT NULL,
-    is_verified     BOOLEAN NOT NULL DEFAULT FALSE,
-    role            user_role NOT NULL,
 
-  	nickname        VARCHAR(64),
-    avatar_url      VARCHAR(512),
-    target_language language_code NOT NULL,
-    native_language native_language_code NOT NULL,
+    is_verified     BOOLEAN NOT NULL DEFAULT FALSE,
+    role            user_role NOT NULL DEFAULT 'learner',
     timezone        VARCHAR(64) NOT NULL DEFAULT 'UTC',
+  	nickname        VARCHAR(64) NOT NULL DEFAULT 'new user',
+    avatar_url      VARCHAR(512),
+    native_language native_language_code NOT NULL,
     gems_balance    INT DEFAULT 0,
-    level_self_assign INT CHECK (level_self_assign BETWEEN 1 AND 5),
+
+    active_language language_code NOT NULL,
 
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -64,6 +64,23 @@ CREATE TABLE auth_sessions (
 
 CREATE INDEX idx_tokens_expires_at ON auth_tokens(expires_at);
 CREATE INDEX idx_sessions_expires_at ON auth_sessions(expires_at);
+```
+
+```postgresql
+-- Profiles for each language the user is learning
+CREATE TABLE user_learning_profiles (
+    user_id           INT NOT NULL REFERENCES users(id),
+    language          language_code NOT NULL,
+    level_self_assign INT NOT NULL DEFAULT 2 CHECK (level_self_assign BETWEEN 1 AND 5),
+
+    -- 用于记录该语言下的独立进度（如该语言下的总积分、streak 等）
+    -- 以后可以在此扩展该语言的特定设置
+
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    PRIMARY KEY (user_id, language)
+);
 ```
 
 #### 1.1.2 `tasks` — 任务池
@@ -236,7 +253,7 @@ CREATE TABLE task_schedules (
 CREATE INDEX idx_schedules_lang_date ON task_schedules(language, date);
 ```
 
-**注**：因为 task 是未组装的，任务大厅向用户提供的应当是 `schedule_id`
+**注**：因为 task 是未组装的，任务大厅向用户提供的应当是 `schedule_id` 而不是 `task_id`
 
 #### 1.1.4 `practice_sessions` — 用户任务会话
 
@@ -284,13 +301,14 @@ CREATE INDEX idx_messages_session ON session_messages(session_id);
 
 #### 1.2.2 `review_logs` — 复习记录
 
-#### 1.2.3 `user_streaks` — 周连胜
+#### 1.2.3 周连胜 streak
+
+可能可以直接alter user_learning_profiles
 
 #### 1.2.4 `notebook_entries` — 个人笔记本
 
 - 用户既可以在tutor的反馈上标记笔记，也可以在背景材料中选择内容加入笔记本。前端上这可能需要通过特定的hook实现，加入笔记本时既需要包括选中词，又需要携带其所在的句子/语境，以便AI生成相关复习材料。
-- 直接在笔记条目上存储 SRS 参数，避免多表 JOIN。
-- `ease_factor` / `interval_days` 采用 SM-2 算法核心参数，便于计算下次复习时间。
+- 直接在笔记条目上存储 FSRS 参数，避免多表 JOIN。
 
 ### 1.3 gamma 阶段
 
@@ -299,115 +317,6 @@ CREATE INDEX idx_messages_session ON session_messages(session_id);
 #### 1.3.2 `admin_feedback_inbox` — 学习者反馈收集
 
 #### 1.3.3 `gem_transactions` 表
-
-### 1.4 数据库 ER 图
-
-```mermaid
-erDiagram
-    users {
-        INT id PK
-        VARCHAR email UK
-        TEXT password_hash
-        BOOLEAN is_verified
-        user_role role
-        VARCHAR nickname
-        VARCHAR avatar_url
-        language_code target_language
-        VARCHAR native_language
-        VARCHAR timezone
-        INT gems_balance
-        INT level_self_assign
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
-        TIMESTAMPTZ deleted_at
-    }
-
-    auth_tokens {
-        UUID id PK
-        INT user_id FK
-        TEXT token_hash
-        token_purpose purpose
-        TIMESTAMPTZ used_at
-        TIMESTAMPTZ expires_at
-        TIMESTAMPTZ created_at
-    }
-
-    auth_sessions {
-        UUID id PK
-        INT user_id FK
-        TEXT ip_address
-        TEXT user_agent
-        TIMESTAMPTZ expires_at
-        TIMESTAMPTZ created_at
-    }
-
-    tasks {
-        INT id PK
-        BOOLEAN is_active
-        language_code language
-        task_type type
-        ui_variant ui
-        task_cadence cadence
-        VARCHAR title_template
-        TEXT description_template
-        JSONB objectives_template
-        TEXT agent_prompt_template
-        JSONB agent_persona_pool
-        TEXT background_html
-        JSONB candidates
-        INT max_turns
-        INT estimated_words
-        INT difficulty
-        INT point_reward
-        INT gem_reward
-        TIMESTAMPTZ last_scheduled_at
-        INT created_by FK
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
-    }
-
-    task_schedules {
-        INT id PK
-        INT task_id FK
-        language_code language
-        DATE date
-        schedule_origin origin
-        VARCHAR resolved_title
-        TEXT resolved_description
-        JSONB resolved_objectives
-        TEXT resolved_agent_prompt
-        JSONB resolved_context
-        TIMESTAMPTZ created_at
-    }
-
-    practice_sessions {
-        INT id PK
-        INT user_id FK
-        INT schedule_id FK
-        JSONB agent_prompt_snapshot
-        session_status status
-        JSONB tutor_feedback
-        TIMESTAMPTZ started_at
-        TIMESTAMPTZ completed_at
-    }
-
-    session_messages {
-        BIGINT id PK
-        INT session_id FK
-        message_role role
-        TEXT content
-        JSONB llm_metadata
-        TIMESTAMPTZ created_at
-    }
-
-    users ||--o{ auth_tokens : "holds"
-    users ||--o{ auth_sessions : "logs in"
-    users ||--o{ tasks : "creates (admin)"
-    users ||--o{ practice_sessions : "starts"
-    tasks ||--o{ task_schedules : "scheduled into"
-    task_schedules ||--o{ practice_sessions : "practiced via"
-    practice_sessions ||--o{ session_messages : "contains"
-```
 
 ---
 
@@ -461,19 +370,16 @@ erDiagram
 |---|---|---|---|
 | `email` | string | ✅ | 最长 128 字符 |
 | `password` | string | ✅ | 8–72 字符，至少含大小写字母和数字各一 |
-| `target_language` | string | ✅ | `"en"` / `"es"` / `"fr"` |
-| `native_language` | string | ✅ | BCP 47 格式，如 `"zh"` `"zh-CN"` `"ja"` |
-| `timezone` | string | | IANA 时区，默认 `"UTC"` |
-| `level_self_assign` | int | ✅ | 1–5，自我评估水平 |
+| `target_languages` | array[string] | ✅ | 允许包含 `"en"` / `"es"` / `"fr"` |
+| `native_language` | string | ✅ | BCP 47 格式，如 `"zh"` `"zh-CN"` `"ja"`，由前端自动附上 |
+| `timezone` | string | | IANA 时区，默认值 `"UTC"`，由前端自动附上 |
 
 **201 Created**
 
 ```json
 {
-  "id": 1,
   "email": "learner@example.com",
-  "role": "learner",
-  "target_language": "en",
+  "target_languages": ["en"],
   "native_language": "zh-CN",
   "created_at": "2025-07-14T08:00:00Z"
 }
@@ -490,13 +396,15 @@ erDiagram
 
 `POST /auth/verify-email` 🆓
 
+这个端点既用于注册，也用于修改密码时的邮箱验证。若验证成功，用户获得Cookie，新注册用户会被前端重定向至主页，试图重置密码的用户则会被前端重定向至修改密码页。
+
 **Request Body**
 
 | 字段 | 类型 | 必填 |
 |---|---|---|
 | `token` | string | ✅ |
 
-**204 No Content** — 成功，无响应体。
+**204 No Content** — 成功，无响应体，下发 `Set-Cookie` 头。
 
 | HTTP | err | 触发条件 |
 |---|---|---|
@@ -514,22 +422,7 @@ erDiagram
 | `email` | string | ✅ |
 | `password` | string | ✅ |
 
-**200 OK** — 同时下发 `Set-Cookie` 头。
-
-```json
-{
-  "id": 1,
-  "email": "learner@example.com",
-  "role": "learner",
-  "nickname": "Aria",
-  "avatar_url": null,
-  "target_language": "en",
-  "native_language": "zh-CN",
-  "timezone": "Asia/Shanghai",
-  "gems_balance": 120,
-  "level_self_assign": 3
-}
-```
+**200 OK** — 下发 `Set-Cookie` 头；返回与 `GET /users/me` 相同的内容。
 
 | HTTP | err | 触发条件 |
 |---|---|---|
@@ -542,7 +435,7 @@ erDiagram
 
 **204 No Content** — 服务端删除该 session 行，并下发 `Set-Cookie` 清除 cookie。
 
-#### 2.1.5 请求重置密码
+#### 2.1.5 未登录状态下请求重置密码
 
 `POST /auth/password-reset/request` 🆓
 
@@ -560,15 +453,14 @@ erDiagram
 }
 ```
 
-#### 2.1.6 确认重置密码
+#### 2.1.6 指定新密码
 
-`POST /auth/password-reset/confirm` 🆓
+`POST /auth/password-reset/confirm` 🔒
 
 **Request Body**
 
 | 字段 | 类型 | 必填 |
 |---|---|---|
-| `token` | string | ✅ |
 | `new_password` | string | ✅ |
 
 **204 No Content**
@@ -594,31 +486,25 @@ erDiagram
   "email": "learner@example.com",
   "role": "learner",
   "nickname": "Aria",
-  "avatar_url": "https://cdn.libiamo.uk/avatars/1.webp",
-  "target_language": "en",
+  "avatar_url": "https://cravatar.cn/avatar/[邮箱MD5值]",
   "native_language": "zh-CN",
   "timezone": "Asia/Shanghai",
   "gems_balance": 120,
-  "level_self_assign": 3,
+  "active_language": "en",
+  "languages": [
+    { "code": "en", "level_self_assign": 3 },
+    { "code": "es", "level_self_assign": 1 }
+  ],
   "created_at": "2025-07-01T10:00:00Z",
   "updated_at": "2025-07-14T08:30:00Z"
 }
 ```
 
-#### 2.2.2 更新个人信息
+#### 2.2.2 更新个人信息/切换学习语言【BETA阶段再做】
 
 `PATCH /users/me` 🔒
 
-**Request Body** — 仅传需要修改的字段：
-
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `nickname` | string | 最长 64 字符 |
-| `avatar_url` | string | 最长 512 字符 |
-| `target_language` | string | 切换目标语言 |
-| `native_language` | string | |
-| `timezone` | string | IANA 时区 |
-| `level_self_assign` | int | 1–5 |
+**Request Body** — 仅传需要修改的字段
 
 **200 OK** — 返回更新后的完整用户对象（同 2.2.1）。
 
@@ -801,7 +687,7 @@ erDiagram
 
 | HTTP | err | 触发条件 |
 |---|---|---|
-| 409 | `TASK_HAS_ACTIVE_SESSIONS` | 修改关键字段(`type/ui/max_turns/language/cadence`) 时存在进行中的 session |
+| 409 | `TASK_HAS_ACTIVE_SESSIONS` | 修改关键字段(`type|ui|max_turns|language|cadence`) 时存在进行中的 session |
 
 > **Note:** 将 `is_active` 设为 `false` 即为软删除。已产生的排期和历史 session 不受影响。
 
@@ -815,7 +701,7 @@ erDiagram
 
 `GET /schedules` 🔒
 
-基于当前用户的 `target_language` 自动筛选。
+基于当前用户的 `active_language` 自动筛选。
 
 **Query Parameters**
 
@@ -1203,7 +1089,7 @@ erDiagram
 | `POST` | `/auth/login` | 🆓 | 登录 |
 | `POST` | `/auth/logout` | 🔒 | 登出 |
 | `POST` | `/auth/password-reset/request` | 🆓 | 申请密码重置 |
-| `POST` | `/auth/password-reset/confirm` | 🆓 | 确认密码重置 |
+| `POST` | `/auth/password-reset/confirm` | 🔒 | 指定新密码 |
 | `GET` | `/users/me` | 🔒 | 获取个人信息 |
 | `PATCH` | `/users/me` | 🔒 | 修改个人信息 |
 | `GET` | `/users/me/sessions` | 🔒 | 练习历史 |
