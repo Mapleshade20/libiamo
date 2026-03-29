@@ -16,7 +16,7 @@ CHECK (
     VALUE ~ '^[a-z]{2}(-[A-Z]{2})?$'
 );
 
--- 1. Users Table
+-- Users Table
 CREATE TABLE users (
     id              INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email           VARCHAR(128) UNIQUE NOT NULL,
@@ -481,9 +481,10 @@ erDiagram
 
 | HTTP | err | 触发条件 |
 |---|---|---|
-| 409 | `EMAIL_ALREADY_EXISTS` | 邮箱已注册 |
+| 409 | `EMAIL_ALREADY_EXISTS` | 邮箱已注册且对应用户已验证 |
+| 429 | `TOO_MANY_REQUESTS` | 未验证用户20分钟内再次以相同邮箱注册 |
 
-> **Note:** 注册后异步发送验证邮件。邮件中链接携带明文 token 作为 query 参数，服务端存储 token 的 SHA-256 哈希。
+> **Note:** 注册后发送验证邮件。邮件中链接携带明文 token 作为 query 参数，服务端存储 token 的 SHA-256 哈希。未验证的用户(1)无法登录，(2)请求重置密码不会执行，(3)可以在20分钟后覆盖注册，20分钟内尝试再注册时系统返回 429 Too Many Requests。
 
 #### 2.1.2 验证邮箱
 
